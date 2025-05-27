@@ -1,7 +1,7 @@
-<!DOCTYPE html>
+<!DOCTYPE html>  
 <html lang="ru">
 <head>
-  <meta charset="UTF-8">
+  <meta charset="UTF-8" />
   <title>Админ — СоцОпросник</title>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels"></script>
@@ -59,7 +59,7 @@
     #chart-container, #qrcode, #result {
       margin-top: 40px; text-align: center;
     }
-    canvas { margin: 20px auto; }
+    canvas { margin: 20px auto; max-width: 100%; }
     .logo {
       display: block;
       margin: 0 auto 20px auto;
@@ -87,13 +87,14 @@
       margin-top: 0;
     }
     .sticky-bar {
+      position: sticky;
+      top: 0;
       background: var(--card);
       padding: 10px;
       z-index: 999;
       display: flex;
       justify-content: space-around;
       box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-      margin-top: 30px;
     }
     @media (max-width: 600px) {
       .container {
@@ -114,6 +115,25 @@
       box-shadow: 0 5px 10px rgba(0,0,0,0.3);
       z-index: 9999;
     }
+    /* Скрываем поле вариантов по умолчанию */
+    #choiceOptions {
+      display: none;
+      margin-top: 10px;
+    }
+    table {
+      border-collapse: collapse;
+      width: 100%;
+      margin-top: 10px;
+    }
+    th, td {
+      border: 1px solid #ccc;
+      padding: 8px;
+      text-align: left;
+    }
+    th {
+      background-color: var(--accent);
+      color: white;
+    }
   </style>
 </head>
 <body>
@@ -125,7 +145,7 @@
     <h2>Создание вопроса</h2>
     <form id="questionBuilder" onsubmit="return false;">
       <label for="questionText">Текст вопроса:</label>
-      <input type="text" id="questionText" required>
+      <input type="text" id="questionText" required />
 
       <label for="questionType">Тип вопроса: <span title="Тип определяет формат ответа (1 из вариантов, шкала и др.)">❓</span></label>
       <select id="questionType">
@@ -134,22 +154,18 @@
         <option value="likert">Шкала Лайкерта (1-5)</option>
       </select>
 
-      <div id="choiceOptions" style="display: none;">
+      <div id="choiceOptions">
         <label>Варианты ответа (через запятую):</label>
-        <input type="text" id="choices">
+        <input type="text" id="choices" />
       </div>
 
       <div class="button-row">
         <button type="button" onclick="addQuestion()">Добавить вопрос</button>
+        <button type="button" onclick="saveSurvey()">📂 Сохранить</button>
+        <button type="button" onclick="clearSurvey()">🗑 Сброс</button>
+        <button type="button" onclick="previewSurvey()">🔍 Предпросмотр</button>
       </div>
     </form>
-
-    <!-- Кнопки действия — перенесены сюда -->
-    <div class="sticky-bar">
-      <button onclick="saveSurvey()">📂 Сохранить</button>
-      <button onclick="clearSurvey()">🗑 Сброс</button>
-      <button onclick="previewSurvey()">🔍 Предпросмотр</button>
-    </div>
 
     <div id="qrcode"></div>
 
@@ -162,6 +178,11 @@
     </div>
 
     <div id="result"></div>
+
+    <h2>Ответы респондентов</h2>
+    <div id="responsesContainer">
+      <p>Ответов пока нет.</p>
+    </div>
   </div>
 
   <script>
@@ -171,6 +192,68 @@
     }
     if (localStorage.getItem('theme') === 'dark') document.body.classList.add('dark');
 
+    const questionTextInput = document.getElementById('questionText');
+    const questionTypeSelect = document.getElementById('questionType');
+    const choiceOptionsDiv = document.getElementById('choiceOptions');
+    const choicesInput = document.getElementById('choices');
+
+    // Показываем поле вариантов только если выбран "Одиночный выбор"
+    questionTypeSelect.addEventListener('change', () => {
+      if (questionTypeSelect.value === 'choice') {
+        choiceOptionsDiv.style.display = 'block';
+      } else {
+        choiceOptionsDiv.style.display = 'none';
+        choicesInput.value = '';
+      }
+    });
+
+    function addQuestion() {
+      const text = questionTextInput.value.trim();
+      const type = questionTypeSelect.value;
+      const choices = choicesInput.value.trim();
+
+      if (!text) {
+        alert('Введите текст вопроса');
+        return;
+      }
+      if (type === 'choice' && !choices) {
+        alert('Введите варианты ответа для вопроса выбора');
+        return;
+      }
+
+      let surveyStructure = JSON.parse(localStorage.getItem('surveyStructure')) || [];
+      surveyStructure.push({ text, type, choices });
+      localStorage.setItem('surveyStructure', JSON.stringify(surveyStructure));
+
+      questionTextInput.value = '';
+      choicesInput.value = '';
+      questionTypeSelect.value = 'text';
+      choiceOptionsDiv.style.display = 'none';
+
+      showToast('Вопрос добавлен');
+    }
+
+    function saveSurvey() {
+      showToast('Опрос сохранён');
+      renderResponses();
+    }
+
+    function clearSurvey() {
+      if (!confirm('Вы уверены, что хотите сбросить все вопросы и ответы?')) return;
+      localStorage.removeItem('surveyStructure');
+      localStorage.removeItem('surveyResponses');
+      document.getElementById('questionText').value = '';
+      document.getElementById('choices').value = '';
+      document.getElementById('result').innerHTML = '';
+      renderResponses();
+      resetCharts();
+      showToast('Опрос и ответы сброшены');
+    }
+
+    function previewSurvey() {
+      window.open('survey.html', '_blank');
+    }
+
     function showToast(msg) {
       const toast = document.createElement('div');
       toast.className = 'toast';
@@ -178,7 +261,143 @@
       document.body.appendChild(toast);
       setTimeout(() => toast.remove(), 3000);
     }
+
+    // Chart instances
+    let ageChartInstance = null;
+    let genderChartInstance = null;
+
+    function renderResponses() {
+      const container = document.getElementById('responsesContainer');
+      const responses = JSON.parse(localStorage.getItem('surveyResponses')) || [];
+
+      if (responses.length === 0) {
+        container.innerHTML = '<p>Ответов пока нет.</p>';
+        resetCharts();
+        return;
+      }
+
+      // Таблица ответов
+      let html = '<table><thead><tr>';
+      const keys = Object.keys(responses[0]);
+      keys.forEach(k => html += `<th>${k}</th>`);
+      html += '</tr></thead><tbody>';
+      responses.forEach(resp => {
+        html += '<tr>';
+        keys.forEach(k => html += `<td>${resp[k]}</td>`);
+        html += '</tr>';
+      });
+      html += '</tbody></table>';
+      container.innerHTML = html;
+
+      // Подготовка данных для диаграмм
+
+      // Распределение по полу — ищем поле с названием, содержащим "пол" (регистр не важен)
+      let genderKey = keys.find(k => k.toLowerCase().includes('пол'));
+      // Возраст — ищем поле, содержащий "возраст"
+      let ageKey = keys.find(k => k.toLowerCase().includes('возраст'));
+
+      let genderData = {};
+      let ageData = [];
+
+      responses.forEach(r => {
+        if (genderKey) {
+          const g = r[genderKey] || 'Не указан';
+          genderData[g] = (genderData[g] || 0) + 1;
+        }
+        if (ageKey) {
+          let a = parseInt(r[ageKey]);
+          if (!isNaN(a)) ageData.push(a);
+        }
+      });
+
+      // Рендер пола
+      if (genderChartInstance) genderChartInstance.destroy();
+      const genderCtx = document.getElementById('genderChart').getContext('2d');
+      genderChartInstance = new Chart(genderCtx, {
+        type: 'pie',
+        data: {
+          labels: Object.keys(genderData),
+          datasets: [{
+            label: 'Пол',
+            data: Object.values(genderData),
+            backgroundColor: ['#FF6384', '#36A2EB', '#FFCE56', '#AAAAAA'],
+          }]
+        },
+        options: {
+          plugins: {
+            datalabels: {
+              formatter: (value, ctx) => `${value} чел.`,
+              color: '#fff',
+              font: { weight: 'bold' },
+            }
+          }
+        },
+        plugins: [ChartDataLabels]
+      });
+
+      // Рендер возраста — делим на возрастные группы (например: <20, 20-29, 30-39, 40+)
+      let ageGroups = { '<20': 0, '20-29': 0, '30-39': 0, '40+': 0 };
+      ageData.forEach(a => {
+        if (a < 20) ageGroups['<20']++;
+        else if (a < 30) ageGroups['20-29']++;
+        else if (a < 40) ageGroups['30-39']++;
+        else ageGroups['40+']++;
+      });
+
+      if (ageChartInstance) ageChartInstance.destroy();
+      const ageCtx = document.getElementById('ageChart').getContext('2d');
+      ageChartInstance = new Chart(ageCtx, {
+        type: 'bar',
+        data: {
+          labels: Object.keys(ageGroups),
+          datasets: [{
+            label: 'Количество',
+            data: Object.values(ageGroups),
+            backgroundColor: '#36A2EB'
+          }]
+        },
+        options: {
+          scales: {
+            y: { beginAtZero: true, stepSize: 1 }
+          },
+          plugins: {
+            datalabels: {
+              anchor: 'end',
+              align: 'top',
+              color: '#000',
+              font: { weight: 'bold' },
+            }
+          }
+        },
+        plugins: [ChartDataLabels]
+      });
+    }
+
+    function resetCharts() {
+      if (ageChartInstance) {
+        ageChartInstance.destroy();
+        ageChartInstance = null;
+      }
+      if (genderChartInstance) {
+        genderChartInstance.destroy();
+        genderChartInstance = null;
+      }
+      document.getElementById('genderChart').getContext('2d').clearRect(0, 0, 400, 300);
+      document.getElementById('ageChart').getContext('2d').clearRect(0, 0, 400, 300);
+    }
+
+    // Инициализация при загрузке
+    window.onload = () => {
+      renderResponses();
+      // Изначально скрываем поле вариантов, если не выбран "Одиночный выбор"
+      if (questionTypeSelect.value === 'choice') {
+        choiceOptionsDiv.style.display = 'block';
+      } else {
+        choiceOptionsDiv.style.display = 'none';
+      }
+    };
   </script>
 </body>
 </html>
+
 
